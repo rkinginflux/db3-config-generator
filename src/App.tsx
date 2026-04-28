@@ -138,7 +138,6 @@ function App() {
               <p className="section-kicker">Summary</p>
               <h2>Resource allocation</h2>
             </div>
-            <p className="section-note">Directly derived from the ported shell logic.</p>
           </div>
           <div className="summary-grid">
             {configuration.summary.map((metric) => (
