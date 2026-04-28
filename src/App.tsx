@@ -39,11 +39,10 @@ function App() {
     <div className="page-shell">
       <main className="page-grid">
         <section className="hero-card panel panel--hero">
-          <div className="eyebrow">Static browser-based port</div>
+          <div className="eyebrow">Online for V3 Enterprise Deployments</div>
           <h1>InfluxDB 3 Enterprise configuration generator</h1>
           <p className="hero-copy">
-            A safe public-facing reimplementation of the shell script. It never detects host hardware, never runs
-            shell commands, and only generates recommendations from the explicit values entered below.
+            A safe online form that only generates recommendations from the explicit values entered below.
           </p>
           <div className="hero-meta">
             <span>Pure TypeScript logic</span>
