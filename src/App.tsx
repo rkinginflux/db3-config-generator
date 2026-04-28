@@ -58,8 +58,6 @@ function App() {
               <p className="section-kicker">Inputs</p>
               <h2>Define the node explicitly</h2>
             </div>
-            <p className="section-note">CPU and RAM are user supplied only. Minimums are clamped to match the script.</p>
-          </div>
 
           <div className="input-grid">
             <label className="field">
@@ -156,7 +154,7 @@ function App() {
               <p className="section-kicker">Command</p>
               <h2>Recommended startup command</h2>
             </div>
-            <p className="section-note">Generated from the same mode, memory, and object store rules as the script.</p>
+            <p className="section-note">Generated from the same mode, memory, and object store rules.</p>
           </div>
           <pre className="code-block"><code>{configuration.command}</code></pre>
         </section>
