@@ -39,7 +39,7 @@ function App() {
     <div className="page-shell">
       <main className="page-grid">
         <section className="hero-card panel panel--hero">
-          <div className="eyebrow">Online for V3 Enterprise Deployments</div>
+          <div className="eyebrow">Online form for V3 Enterprise Deployments</div>
           <h1>InfluxDB 3 Enterprise configuration generator</h1>
           <p className="hero-copy">
             A safe online form that only generates recommendations from the explicit values entered below.
