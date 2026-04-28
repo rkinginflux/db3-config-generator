@@ -58,6 +58,7 @@ function App() {
               <p className="section-kicker">Inputs</p>
               <h2>Define the node explicitly</h2>
             </div>
+          </div>
 
           <div className="input-grid">
             <label className="field">
