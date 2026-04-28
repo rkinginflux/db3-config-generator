@@ -167,7 +167,6 @@ function App() {
               <p className="section-kicker">Environment variables</p>
               <h2>Optional export block</h2>
             </div>
-            <p className="section-note">Mirrors the shell script’s optional env-var output.</p>
           </div>
           {configuration.envVarSections.length > 0 ? (
             <div className="env-grid">
