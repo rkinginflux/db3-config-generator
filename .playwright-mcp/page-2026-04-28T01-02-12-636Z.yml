@@ -1,0 +1,198 @@
+- main [ref=e4]:
+  - generic [ref=e5]:
+    - generic [ref=e6]: Static browser-based port
+    - heading "InfluxDB 3 Enterprise configuration generator" [level=1] [ref=e7]
+    - paragraph [ref=e8]: A safe public-facing reimplementation of the shell script. It never detects host hardware, never runs shell commands, and only generates recommendations from the explicit values entered below.
+    - generic [ref=e9]:
+      - generic [ref=e10]: Pure TypeScript logic
+      - generic [ref=e11]: Shell parity for calculations
+      - generic [ref=e12]: Static deployable output
+  - generic [ref=e13]:
+    - generic [ref=e14]:
+      - generic [ref=e15]:
+        - paragraph [ref=e16]: Inputs
+        - heading "Define the node explicitly" [level=2] [ref=e17]
+      - paragraph [ref=e18]: CPU and RAM are user supplied only. Minimums are clamped to match the script.
+    - generic [ref=e19]:
+      - generic [ref=e20]:
+        - generic [ref=e21]: CPU cores
+        - spinbutton "CPU cores" [ref=e22]: "16"
+      - generic [ref=e23]:
+        - generic [ref=e24]: RAM (GB)
+        - spinbutton "RAM (GB)" [ref=e25]: "32"
+      - generic [ref=e26]:
+        - generic [ref=e27]: Mode
+        - combobox "Mode" [ref=e28]:
+          - option "all" [selected]
+          - option "ingest"
+          - option "query"
+          - option "compact"
+          - option "process"
+          - option "ingest,query"
+          - option "query,compact"
+      - generic [ref=e29]:
+        - generic [ref=e30]: Object store
+        - combobox "Object store" [ref=e31]:
+          - option "file" [selected]
+          - option "s3"
+          - option "google"
+          - option "azure"
+    - generic [ref=e32]:
+      - checkbox "Include the environment variable section" [checked] [ref=e33]
+      - generic [ref=e34]: Include the environment variable section
+    - generic [ref=e35]:
+      - text: Internal normalization still accepts shell-style aliases like
+      - code [ref=e36]: ingest-query
+      - text: ","
+      - code [ref=e37]: ingest_query
+      - text: ","
+      - code [ref=e38]: query-compact
+      - text: ","
+      - code [ref=e39]: query_compact
+      - text: ", and"
+      - code [ref=e40]: gcs
+      - text: .
+  - generic [ref=e41]:
+    - generic [ref=e42]:
+      - generic [ref=e43]:
+        - paragraph [ref=e44]: Summary
+        - heading "Resource allocation" [level=2] [ref=e45]
+      - paragraph [ref=e46]: Directly derived from the ported shell logic.
+    - generic [ref=e47]:
+      - article [ref=e48]:
+        - paragraph [ref=e49]: CPU cores
+        - strong [ref=e50]: "16"
+        - generic [ref=e51]: Explicit user input only
+      - article [ref=e52]:
+        - paragraph [ref=e53]: RAM
+        - strong [ref=e54]: 32GB
+        - generic [ref=e55]: No host auto-detection
+      - article [ref=e56]:
+        - paragraph [ref=e57]: Mode
+        - strong [ref=e58]: all
+        - generic [ref=e59]: Balanced for all workloads (ingest, query, compact, process)
+      - article [ref=e60]:
+        - paragraph [ref=e61]: Object store
+        - strong [ref=e62]: file
+      - article [ref=e63]:
+        - paragraph [ref=e64]: IO threads
+        - strong [ref=e65]: "3"
+        - generic [ref=e66]: HTTP requests and line protocol parsing
+      - article [ref=e67]:
+        - paragraph [ref=e68]: DataFusion threads
+        - strong [ref=e69]: "13"
+        - generic [ref=e70]: Queries, snapshots, and compaction
+      - article [ref=e71]:
+        - paragraph [ref=e72]: Exec memory pool
+        - strong [ref=e73]: 70%
+      - article [ref=e74]:
+        - paragraph [ref=e75]: Parquet cache
+        - strong [ref=e76]: 3GB
+      - article [ref=e77]:
+        - paragraph [ref=e78]: WAL replay concurrency
+        - strong [ref=e79]: "16"
+      - article [ref=e80]:
+        - paragraph [ref=e81]: Snapshot threshold
+        - strong [ref=e82]: 60%
+      - article [ref=e83]:
+        - paragraph [ref=e84]: Object store connections
+        - strong [ref=e85]: "32"
+  - generic [ref=e86]:
+    - generic [ref=e87]:
+      - generic [ref=e88]:
+        - paragraph [ref=e89]: Command
+        - heading "Recommended startup command" [level=2] [ref=e90]
+      - paragraph [ref=e91]: Generated from the same mode, memory, and object store rules as the script.
+    - code [ref=e93]: influxdb3 --num-io-threads=3 serve \ --mode=all \ --node-id=<YOUR_NODE_ID> \ --cluster-id=<YOUR_CLUSTER_ID> \ --object-store=file \ --data-dir=/var/lib/influxdb3 \ --datafusion-num-threads=13 \ --exec-mem-pool-bytes=70% \ --parquet-mem-cache-size=3GB \ --checkpoint-interval=1h \ --wal-replay-concurrency-limit=16 \ --force-snapshot-mem-threshold=60% \ --object-store-connection-limit=32 \ --license-email=<YOUR_EMAIL>
+  - generic [ref=e94]:
+    - generic [ref=e95]:
+      - generic [ref=e96]:
+        - paragraph [ref=e97]: Environment variables
+        - heading "Optional export block" [level=2] [ref=e98]
+      - paragraph [ref=e99]: Mirrors the shell script’s optional env-var output.
+    - generic [ref=e100]:
+      - article [ref=e101]:
+        - heading "Thread configuration" [level=3] [ref=e102]
+        - code [ref=e104]: export INFLUXDB3_NUM_IO_THREADS=3 export INFLUXDB3_DATAFUSION_NUM_THREADS=13
+      - article [ref=e105]:
+        - heading "Mode and identity" [level=3] [ref=e106]
+        - code [ref=e108]: export INFLUXDB3_ENTERPRISE_MODE=all export INFLUXDB3_NODE_IDENTIFIER_PREFIX=<YOUR_NODE_ID> export INFLUXDB3_ENTERPRISE_CLUSTER_ID=<YOUR_CLUSTER_ID>
+      - article [ref=e109]:
+        - heading "Memory configuration" [level=3] [ref=e110]
+        - code [ref=e112]: export INFLUXDB3_EXEC_MEM_POOL_BYTES=70% export INFLUXDB3_PARQUET_MEM_CACHE_SIZE=3GB export INFLUXDB3_FORCE_SNAPSHOT_MEM_THRESHOLD=60%
+      - article [ref=e113]:
+        - heading "Startup optimization" [level=3] [ref=e114]
+        - code [ref=e116]: export INFLUXDB3_CHECKPOINT_INTERVAL=1h export INFLUXDB3_WAL_REPLAY_CONCURRENCY_LIMIT=16
+      - article [ref=e117]:
+        - heading "Object store" [level=3] [ref=e118]
+        - code [ref=e120]: export INFLUXDB3_OBJECT_STORE=file export INFLUXDB3_DB_DIR=/var/lib/influxdb3 export INFLUXDB3_OBJECT_STORE_CONNECTION_LIMIT=32
+      - article [ref=e121]:
+        - heading "Licensing" [level=3] [ref=e122]
+        - code [ref=e124]: export INFLUXDB3_ENTERPRISE_LICENSE_EMAIL=<YOUR_EMAIL>
+  - generic [ref=e125]:
+    - generic [ref=e126]:
+      - generic [ref=e128]:
+        - paragraph [ref=e129]: Recommendations
+        - heading "Operational guidance" [level=2] [ref=e130]
+      - list [ref=e131]:
+        - listitem [ref=e132]: • Monitor all workloads and consider specializing nodes if needed
+        - listitem [ref=e133]: • Enable checkpointing for faster restarts
+        - listitem [ref=e134]: • Adjust thread allocation based on observed workload patterns
+        - listitem [ref=e135]: • Always test configuration changes in a non-production environment
+        - listitem [ref=e136]: • Monitor metrics endpoint at /metrics for performance insights
+        - listitem [ref=e137]: • Use --log-filter for debugging specific components
+    - generic [ref=e138]:
+      - generic [ref=e140]:
+        - paragraph [ref=e141]: Quick reference
+        - heading "All modes for the selected hardware" [level=2] [ref=e142]
+      - table [ref=e144]:
+        - rowgroup [ref=e145]:
+          - row "Mode IO Threads DF Threads Mem Pool Cache" [ref=e146]:
+            - columnheader "Mode" [ref=e147]
+            - columnheader "IO Threads" [ref=e148]
+            - columnheader "DF Threads" [ref=e149]
+            - columnheader "Mem Pool" [ref=e150]
+            - columnheader "Cache" [ref=e151]
+        - rowgroup [ref=e152]:
+          - row "all 3 13 70% 3GB" [ref=e153]:
+            - cell "all" [ref=e154]
+            - cell "3" [ref=e155]
+            - cell "13" [ref=e156]
+            - cell "70%" [ref=e157]
+            - cell "3GB" [ref=e158]
+          - row "ingest 5 11 60% -" [ref=e159]:
+            - cell "ingest" [ref=e160]
+            - cell "5" [ref=e161]
+            - cell "11" [ref=e162]
+            - cell "60%" [ref=e163]
+            - cell "-" [ref=e164]
+          - row "query 4 12 90% 4GB" [ref=e165]:
+            - cell "query" [ref=e166]
+            - cell "4" [ref=e167]
+            - cell "12" [ref=e168]
+            - cell "90%" [ref=e169]
+            - cell "4GB" [ref=e170]
+          - row "compact 2 14 80% -" [ref=e171]:
+            - cell "compact" [ref=e172]
+            - cell "2" [ref=e173]
+            - cell "14" [ref=e174]
+            - cell "80%" [ref=e175]
+            - cell "-" [ref=e176]
+          - row "process 4 12 70% 3GB" [ref=e177]:
+            - cell "process" [ref=e178]
+            - cell "4" [ref=e179]
+            - cell "12" [ref=e180]
+            - cell "70%" [ref=e181]
+            - cell "3GB" [ref=e182]
+          - row "ingest,query 4 12 75% 3GB" [ref=e183]:
+            - cell "ingest,query" [ref=e184]
+            - cell "4" [ref=e185]
+            - cell "12" [ref=e186]
+            - cell "75%" [ref=e187]
+            - cell "3GB" [ref=e188]
+          - row "query,compact 4 12 85% 3GB" [ref=e189]:
+            - cell "query,compact" [ref=e190]
+            - cell "4" [ref=e191]
+            - cell "12" [ref=e192]
+            - cell "85%" [ref=e193]
+            - cell "3GB" [ref=e194]
