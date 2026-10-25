@@ -14,6 +14,7 @@ export type CanonicalMode = (typeof CANONICAL_MODES)[number];
 export type ModeInput = CanonicalMode | 'ingest-query' | 'ingest_query' | 'query-compact' | 'query_compact';
 export type CanonicalObjectStore = (typeof CANONICAL_OBJECT_STORES)[number];
 export type ObjectStoreInput = CanonicalObjectStore | 'gcs';
+export type StorageEngine = 'pacha-tree' | 'parquet';
 
 export interface GeneratorInput {
   cpus: number;
@@ -21,6 +22,7 @@ export interface GeneratorInput {
   mode: ModeInput;
   objectStore: ObjectStoreInput;
   includeEnvVars: boolean;
+  storageEngine?: StorageEngine;
 }
 
 export interface GeneratorWarning {
@@ -70,6 +72,7 @@ export interface GeneratedConfiguration {
     mode: CanonicalMode;
     objectStore: CanonicalObjectStore;
     includeEnvVars: boolean;
+    storageEngine: StorageEngine;
   };
   warnings: GeneratorWarning[];
   summary: SummaryMetric[];
@@ -376,7 +379,7 @@ function buildObjectStoreEnvLines(objectStore: CanonicalObjectStore): string[] {
       ];
     case 'file':
     default:
-      return ['export INFLUXDB3_OBJECT_STORE=file', 'export INFLUXDB3_DB_DIR=/var/lib/influxdb3'];
+      return ['export INFLUXDB3_OBJECT_STORE=file', 'export INFLUXDB3_DATA_DIR=/var/lib/influxdb3'];
   }
 }
 
@@ -384,7 +387,8 @@ export function buildCommand(
   mode: CanonicalMode,
   objectStore: CanonicalObjectStore,
   threads: ThreadAllocation,
-  additional: AdditionalSettings
+  additional: AdditionalSettings,
+  storageEngine: StorageEngine = 'pacha-tree'
 ): string {
   const lines = [
     `influxdb3 --num-io-threads=${threads.ioThreads} serve`,
@@ -392,23 +396,27 @@ export function buildCommand(
     '--node-id=<YOUR_NODE_ID>',
     '--cluster-id=<YOUR_CLUSTER_ID>',
     ...buildObjectStoreCommandLines(objectStore),
-    `--datafusion-num-threads=${threads.datafusionThreads}`,
-    `--exec-mem-pool-bytes=${threads.memPoolPercent}%`
+    `--num-datafusion-threads=${threads.datafusionThreads}`,
+    `--exec-mem-pool-size=${threads.memPoolPercent}%`
   ];
 
   if (threads.parquetCacheGb > 0) {
-    lines.push(`--parquet-mem-cache-size=${threads.parquetCacheGb}GB`);
+    lines.push(`--file-cache-size=${threads.parquetCacheGb}GB`);
   }
 
   lines.push(
-    '--checkpoint-interval=1h',
-    `--wal-replay-concurrency-limit=${additional.walReplayConcurrency}`,
-    `--force-snapshot-mem-threshold=${additional.snapshotMemThreshold}`,
     `--object-store-connection-limit=${additional.objectStoreConnections}`
   );
 
-  if (mode === 'compact' || mode === 'query,compact') {
-    lines.push('--compaction-gen2-duration=24h', '--compaction-check-interval=5m');
+  if (storageEngine === 'parquet') {
+    lines.push(
+      '--checkpoint-interval=1h',
+      `--wal-replay-concurrency-limit=${additional.walReplayConcurrency}`,
+      `--force-snapshot-mem-size=${additional.snapshotMemThreshold}`
+    );
+    if (mode.includes('compact')) {
+      lines.push('--compaction-gen2-duration=24h', '--compaction-check-interval=5m');
+    }
   }
 
   if (mode === 'process') {
@@ -426,37 +434,31 @@ export function buildEnvVarSections(
   mode: CanonicalMode,
   objectStore: CanonicalObjectStore,
   threads: ThreadAllocation,
-  additional: AdditionalSettings
+  additional: AdditionalSettings,
+  storageEngine: StorageEngine = 'pacha-tree'
 ): EnvVarSection[] {
   const sections: EnvVarSection[] = [
     {
       title: 'Thread configuration',
       lines: [
         `export INFLUXDB3_NUM_IO_THREADS=${threads.ioThreads}`,
-        `export INFLUXDB3_DATAFUSION_NUM_THREADS=${threads.datafusionThreads}`
+        `export INFLUXDB3_NUM_DATAFUSION_THREADS=${threads.datafusionThreads}`
       ]
     },
     {
       title: 'Mode and identity',
       lines: [
-        `export INFLUXDB3_ENTERPRISE_MODE=${mode}`,
-        'export INFLUXDB3_NODE_IDENTIFIER_PREFIX=<YOUR_NODE_ID>',
-        'export INFLUXDB3_ENTERPRISE_CLUSTER_ID=<YOUR_CLUSTER_ID>'
+        `export INFLUXDB3_MODE=${mode}`,
+        'export INFLUXDB3_NODE_ID=<YOUR_NODE_ID>',
+        'export INFLUXDB3_CLUSTER_ID=<YOUR_CLUSTER_ID>'
       ]
     },
     {
       title: 'Memory configuration',
       lines: [
-        `export INFLUXDB3_EXEC_MEM_POOL_BYTES=${threads.memPoolPercent}%`,
-        ...(threads.parquetCacheGb > 0 ? [`export INFLUXDB3_PARQUET_MEM_CACHE_SIZE=${threads.parquetCacheGb}GB`] : []),
-        `export INFLUXDB3_FORCE_SNAPSHOT_MEM_THRESHOLD=${additional.snapshotMemThreshold}`
-      ]
-    },
-    {
-      title: 'Startup optimization',
-      lines: [
-        'export INFLUXDB3_CHECKPOINT_INTERVAL=1h',
-        `export INFLUXDB3_WAL_REPLAY_CONCURRENCY_LIMIT=${additional.walReplayConcurrency}`
+        `export INFLUXDB3_EXEC_MEM_POOL_SIZE=${threads.memPoolPercent}%`,
+        ...(threads.parquetCacheGb > 0 ? [`export INFLUXDB3_FILE_CACHE_SIZE=${threads.parquetCacheGb}GB`] : []),
+        ...(storageEngine === 'parquet' ? [`export INFLUXDB3_FORCE_SNAPSHOT_MEM_SIZE=${additional.snapshotMemThreshold}`] : [])
       ]
     },
     {
@@ -468,18 +470,27 @@ export function buildEnvVarSections(
     },
     {
       title: 'Licensing',
-      lines: ['export INFLUXDB3_ENTERPRISE_LICENSE_EMAIL=<YOUR_EMAIL>']
+      lines: ['export INFLUXDB3_LICENSE_EMAIL=<YOUR_EMAIL>']
     }
   ];
 
-  if (mode.includes('compact')) {
+  if (storageEngine === 'parquet') {
     sections.push({
-      title: 'Compaction settings',
+      title: 'Startup optimization',
       lines: [
-        'export INFLUXDB3_ENTERPRISE_COMPACTION_GEN2_DURATION=24h',
-        'export INFLUXDB3_ENTERPRISE_COMPACTION_CHECK_INTERVAL=5m'
+        'export INFLUXDB3_CHECKPOINT_INTERVAL=1h',
+        `export INFLUXDB3_WAL_REPLAY_CONCURRENCY_LIMIT=${additional.walReplayConcurrency}`
       ]
     });
+    if (mode.includes('compact')) {
+      sections.push({
+        title: 'Compaction settings',
+        lines: [
+          'export INFLUXDB3_COMPACTION_GEN2_DURATION=24h',
+          'export INFLUXDB3_COMPACTION_CHECK_INTERVAL=5m'
+        ]
+      });
+    }
   }
 
   if (mode === 'process') {
@@ -492,52 +503,53 @@ export function buildEnvVarSections(
   return sections;
 }
 
-export function buildRecommendations(mode: CanonicalMode): string[] {
-  const specific: Record<CanonicalMode | 'default', string[]> = {
-    all: [
-      'Monitor all workloads and consider specializing nodes if needed',
-      'Enable checkpointing for faster restarts',
-      'Adjust thread allocation based on observed workload patterns'
-    ],
+export function buildRecommendations(mode: CanonicalMode, storageEngine: StorageEngine = 'pacha-tree'): string[] {
+  const startupGuidance = storageEngine === 'parquet'
+    ? 'Enable checkpointing for faster restarts'
+    : 'Tune --snapshot-size and --snapshot-duration to balance restart replay and object-store traffic';
+  const balanced = [
+    'Monitor all workloads and consider specializing nodes if needed',
+    startupGuidance,
+    'Adjust thread allocation based on observed workload patterns'
+  ];
+  const specific: Record<CanonicalMode, string[]> = {
+    all: [...balanced, 'Use all mode for single-node deployments; multi-node clusters need explicit combined modes'],
     ingest: [
       'Scale IO threads with concurrent writers (~1 thread per writer)',
       'Monitor WAL size and adjust --wal-flush-interval if needed',
-      'Consider --wal-max-write-buffer-size for high-throughput scenarios'
+      storageEngine === 'parquet'
+        ? 'Consider --wal-max-buffered-writes to limit queued writes (a count, not bytes)'
+        : 'Tune --wal-buffer-size to control the in-memory WAL flush threshold'
     ],
     query: [
-      'Increase --parquet-mem-cache-size for frequently accessed data',
+      'Tune --file-cache-size for frequently accessed data and leave memory headroom',
       'Use --datafusion-config for advanced query tuning',
       'Monitor query latency and adjust memory pool as needed'
     ],
     compact: [
-      'Adjust --compaction-multipliers for your data patterns',
-      'Monitor compaction lag and add nodes if falling behind',
-      'Consider --compaction-max-num-files-per-plan for large datasets'
+      storageEngine === 'parquet'
+        ? 'Adjust --compaction-multipliers for your data patterns'
+        : 'Tune --compactor-input-size-budget for active compaction input',
+      storageEngine === 'parquet'
+        ? 'Monitor compaction lag and scale the existing compactor; Parquet permits only one running compactor'
+        : 'Monitor compaction lag and add nodes if falling behind',
+      storageEngine === 'parquet'
+        ? 'Tune --compaction-row-limit for rows per output file'
+        : 'Use --compactor-file-cache-size only on dedicated PachaTree compactors'
     ],
     process: [
       'Ensure --plugin-dir contains your Python plugins',
       'Configure --virtual-env-location for dependencies',
       'Monitor plugin execution times and resource usage'
     ],
-    'ingest,query': [
-      'Monitor all workloads and consider specializing nodes if needed',
-      'Enable checkpointing for faster restarts',
-      'Adjust thread allocation based on observed workload patterns'
-    ],
-    'query,compact': [
-      'Monitor all workloads and consider specializing nodes if needed',
-      'Enable checkpointing for faster restarts',
-      'Adjust thread allocation based on observed workload patterns'
-    ],
-    default: [
-      'Monitor all workloads and consider specializing nodes if needed',
-      'Enable checkpointing for faster restarts',
-      'Adjust thread allocation based on observed workload patterns'
-    ]
+    'ingest,query': balanced,
+    'query,compact': balanced
   };
 
   return [
-    ...(specific[mode] ?? specific.default),
+    ...specific[mode],
+    'Sizing values are heuristics, not server defaults; validate thread and combined memory budgets under load',
+    'Memory percentages use detected cgroup/host RAM, not this form; set container limits or use absolute sizes',
     'Always test configuration changes in a non-production environment',
     'Monitor metrics endpoint at /metrics for performance insights',
     'Use --log-filter for debugging specific components'
@@ -560,6 +572,7 @@ export function buildQuickReference(cpus: number, ramGb: number): QuickReference
 
 export function generateConfiguration(input: GeneratorInput): GeneratedConfiguration {
   const mode = normalizeMode(input.mode);
+  const storageEngine = input.storageEngine ?? 'pacha-tree';
   const objectStore = normalizeObjectStore(input.objectStore);
   const clamped = clampResources(input.cpus, input.ramGb);
   const threads = calculateThreads(mode, clamped.cpus, clamped.ramGb);
@@ -573,7 +586,8 @@ export function generateConfiguration(input: GeneratorInput): GeneratedConfigura
       ramGb: clamped.ramGb,
       mode,
       objectStore,
-      includeEnvVars: input.includeEnvVars
+      includeEnvVars: input.includeEnvVars,
+      storageEngine
     },
     warnings: clamped.warnings,
     summary: [
@@ -588,14 +602,17 @@ export function generateConfiguration(input: GeneratorInput): GeneratedConfigura
         note: 'Queries, snapshots, and compaction'
       },
       { label: 'Exec memory pool', value: `${threads.memPoolPercent}%` },
-      { label: 'Parquet cache', value: threads.parquetCacheGb > 0 ? `${threads.parquetCacheGb}GB` : '-' },
-      { label: 'WAL replay concurrency', value: String(additional.walReplayConcurrency) },
-      { label: 'Snapshot threshold', value: additional.snapshotMemThreshold },
+      { label: 'File cache', value: threads.parquetCacheGb > 0 ? `${threads.parquetCacheGb}GB` : 'Server default', note: 'Not disabled when omitted; PachaTree uses this budget beyond query caching' },
+      { label: 'Storage engine', value: storageEngine },
+      ...(storageEngine === 'parquet' ? [
+        { label: 'WAL replay concurrency', value: String(additional.walReplayConcurrency) },
+        { label: 'Snapshot threshold', value: additional.snapshotMemThreshold }
+      ] : []),
       { label: 'Object store connections', value: String(additional.objectStoreConnections) }
     ],
-    command: buildCommand(mode, objectStore, threads, additional),
-    envVarSections: input.includeEnvVars ? buildEnvVarSections(mode, objectStore, threads, additional) : [],
-    recommendations: buildRecommendations(mode),
+    command: buildCommand(mode, objectStore, threads, additional, storageEngine),
+    envVarSections: input.includeEnvVars ? buildEnvVarSections(mode, objectStore, threads, additional, storageEngine) : [],
+    recommendations: buildRecommendations(mode, storageEngine),
     quickReference: buildQuickReference(clamped.cpus, clamped.ramGb)
   };
 }

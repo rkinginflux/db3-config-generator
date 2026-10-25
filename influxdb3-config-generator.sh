@@ -33,6 +33,7 @@ CPUS=""
 RAM_GB=""
 MODE=""
 OBJECT_STORE="file"
+STORAGE_ENGINE="pacha-tree"
 SHOW_ENV_VARS=false
 
 #######################################################################
@@ -101,7 +102,10 @@ ${BOLD}OPTIONS:${NC}
     --cpus N        Number of CPU cores (default: auto-detect)
     --ram N         RAM in GB (default: auto-detect)
     --mode MODE     Node mode (default: interactive selection)
-    --object-store  Object store type: file, s3, gcs, azure (default: file)
+    --object-store  Object store type: file, s3, google (alias: gcs), azure (default: file)
+    --storage-engine ENGINE
+                    Generation context: pacha-tree or parquet (default: pacha-tree)
+                    Does not switch the database storage engine
     --env-vars      Also show environment variable configuration
     --help          Show this help message
 
@@ -151,6 +155,16 @@ while [[ $# -gt 0 ]]; do
             ;;
         --object-store)
             OBJECT_STORE="$2"
+            shift 2
+            ;;
+        --storage-engine)
+            case "${2:-}" in
+                pacha-tree|parquet) STORAGE_ENGINE="$2" ;;
+                *)
+                    print_error "--storage-engine requires pacha-tree or parquet"
+                    exit 1
+                    ;;
+            esac
             shift 2
             ;;
         --env-vars)
@@ -442,10 +456,11 @@ echo ""
 echo -e "${BOLD}Memory Allocation:${NC}"
 echo "  Exec Memory Pool: ${CALC_MEM_POOL_PERCENT}%"
 if [[ $CALC_PARQUET_CACHE_GB -gt 0 ]]; then
-    echo "  Parquet Cache:    ${CALC_PARQUET_CACHE_GB}GB"
+    echo "  File Cache:       ${CALC_PARQUET_CACHE_GB}GB"
 fi
 echo ""
 echo -e "${BOLD}Mode:${NC} $MODE"
+echo -e "${BOLD}Storage engine context:${NC} $STORAGE_ENGINE (does not switch the database engine)"
 echo -e "${BOLD}Description:${NC} $CALC_DESCRIPTION"
 
 #######################################################################
@@ -482,32 +497,35 @@ case $OBJECT_STORE in
         ;;
 esac
 
-CMD+="\n  --datafusion-num-threads=$CALC_DATAFUSION_THREADS \\"
-CMD+="\n  --exec-mem-pool-bytes=${CALC_MEM_POOL_PERCENT}% \\"
+CMD+="\n  --num-datafusion-threads=$CALC_DATAFUSION_THREADS \\"
+CMD+="\n  --exec-mem-pool-size=${CALC_MEM_POOL_PERCENT}% \\"
 
 if [[ $CALC_PARQUET_CACHE_GB -gt 0 ]]; then
-    CMD+="\n  --parquet-mem-cache-size=${CALC_PARQUET_CACHE_GB}GB \\"
+    CMD+="\n  --file-cache-size=${CALC_PARQUET_CACHE_GB}GB \\"
 fi
 
-CMD+="\n  --checkpoint-interval=1h \\"
-CMD+="\n  --wal-replay-concurrency-limit=$WAL_REPLAY_CONCURRENCY \\"
-CMD+="\n  --force-snapshot-mem-threshold=$SNAPSHOT_MEM_THRESHOLD \\"
 CMD+="\n  --object-store-connection-limit=$OBJECT_STORE_CONNECTIONS \\"
 
-# Add mode-specific options
-case $MODE in
-    compact|"query,compact")
+# Legacy Parquet settings are not used by PachaTree.
+if [[ "$STORAGE_ENGINE" == "parquet" ]]; then
+    CMD+="\n  --checkpoint-interval=1h \\"
+    CMD+="\n  --wal-replay-concurrency-limit=$WAL_REPLAY_CONCURRENCY \\"
+    CMD+="\n  --force-snapshot-mem-size=$SNAPSHOT_MEM_THRESHOLD \\"
+    if [[ "$MODE" == *"compact"* ]]; then
         CMD+="\n  --compaction-gen2-duration=24h \\"
         CMD+="\n  --compaction-check-interval=5m \\"
-        ;;
-    process)
-        CMD+="\n  --plugin-dir=/var/lib/influxdb3/plugins \\"
-        ;;
-esac
+    fi
+fi
+
+if [[ "$MODE" == "process" ]]; then
+    CMD+="\n  --plugin-dir=/var/lib/influxdb3/plugins \\"
+fi
 
 CMD+="\n  --license-email=<YOUR_EMAIL>"
 
-echo -e "${GREEN}$CMD${NC}"
+# Expand line separators without interpreting the command's continuation slashes.
+CMD=${CMD//\\n/$'\n'}
+printf '%b%s%b\n' "$GREEN" "$CMD" "$NC"
 
 #######################################################################
 # Generate Environment Variables (Optional)
@@ -518,23 +536,21 @@ if [[ "$SHOW_ENV_VARS" == "true" ]]; then
     
     echo -e "${YELLOW}# Thread configuration${NC}"
     echo "export INFLUXDB3_NUM_IO_THREADS=$CALC_IO_THREADS"
-    echo "export INFLUXDB3_DATAFUSION_NUM_THREADS=$CALC_DATAFUSION_THREADS"
+    echo "export INFLUXDB3_NUM_DATAFUSION_THREADS=$CALC_DATAFUSION_THREADS"
     echo ""
     echo -e "${YELLOW}# Mode and identity${NC}"
-    echo "export INFLUXDB3_ENTERPRISE_MODE=$MODE"
-    echo "export INFLUXDB3_NODE_IDENTIFIER_PREFIX=<YOUR_NODE_ID>"
-    echo "export INFLUXDB3_ENTERPRISE_CLUSTER_ID=<YOUR_CLUSTER_ID>"
+    echo "export INFLUXDB3_MODE=$MODE"
+    echo "export INFLUXDB3_NODE_ID=<YOUR_NODE_ID>"
+    echo "export INFLUXDB3_CLUSTER_ID=<YOUR_CLUSTER_ID>"
     echo ""
     echo -e "${YELLOW}# Memory configuration${NC}"
-    echo "export INFLUXDB3_EXEC_MEM_POOL_BYTES=${CALC_MEM_POOL_PERCENT}%"
+    echo "export INFLUXDB3_EXEC_MEM_POOL_SIZE=${CALC_MEM_POOL_PERCENT}%"
     if [[ $CALC_PARQUET_CACHE_GB -gt 0 ]]; then
-        echo "export INFLUXDB3_PARQUET_MEM_CACHE_SIZE=${CALC_PARQUET_CACHE_GB}GB"
+        echo "export INFLUXDB3_FILE_CACHE_SIZE=${CALC_PARQUET_CACHE_GB}GB"
     fi
-    echo "export INFLUXDB3_FORCE_SNAPSHOT_MEM_THRESHOLD=$SNAPSHOT_MEM_THRESHOLD"
-    echo ""
-    echo -e "${YELLOW}# Startup optimization${NC}"
-    echo "export INFLUXDB3_CHECKPOINT_INTERVAL=1h"
-    echo "export INFLUXDB3_WAL_REPLAY_CONCURRENCY_LIMIT=$WAL_REPLAY_CONCURRENCY"
+    if [[ "$STORAGE_ENGINE" == "parquet" ]]; then
+        echo "export INFLUXDB3_FORCE_SNAPSHOT_MEM_SIZE=$SNAPSHOT_MEM_THRESHOLD"
+    fi
     echo ""
     echo -e "${YELLOW}# Object store${NC}"
     
@@ -559,20 +575,27 @@ if [[ "$SHOW_ENV_VARS" == "true" ]]; then
             ;;
         *)
             echo "export INFLUXDB3_OBJECT_STORE=file"
-            echo "export INFLUXDB3_DB_DIR=/var/lib/influxdb3"
+            echo "export INFLUXDB3_DATA_DIR=/var/lib/influxdb3"
             ;;
     esac
     
     echo "export INFLUXDB3_OBJECT_STORE_CONNECTION_LIMIT=$OBJECT_STORE_CONNECTIONS"
     echo ""
     echo -e "${YELLOW}# Licensing${NC}"
-    echo "export INFLUXDB3_ENTERPRISE_LICENSE_EMAIL=<YOUR_EMAIL>"
+    echo "export INFLUXDB3_LICENSE_EMAIL=<YOUR_EMAIL>"
+
+    if [[ "$STORAGE_ENGINE" == "parquet" ]]; then
+        echo ""
+        echo -e "${YELLOW}# Startup optimization${NC}"
+        echo "export INFLUXDB3_CHECKPOINT_INTERVAL=1h"
+        echo "export INFLUXDB3_WAL_REPLAY_CONCURRENCY_LIMIT=$WAL_REPLAY_CONCURRENCY"
+    fi
     
-    if [[ "$MODE" == *"compact"* ]]; then
+    if [[ "$STORAGE_ENGINE" == "parquet" && "$MODE" == *"compact"* ]]; then
         echo ""
         echo -e "${YELLOW}# Compaction settings${NC}"
-        echo "export INFLUXDB3_ENTERPRISE_COMPACTION_GEN2_DURATION=24h"
-        echo "export INFLUXDB3_ENTERPRISE_COMPACTION_CHECK_INTERVAL=5m"
+        echo "export INFLUXDB3_COMPACTION_GEN2_DURATION=24h"
+        echo "export INFLUXDB3_COMPACTION_CHECK_INTERVAL=5m"
     fi
     
     if [[ "$MODE" == "process" ]]; then
@@ -592,17 +615,33 @@ case $MODE in
     ingest)
         echo "• Scale IO threads with concurrent writers (~1 thread per writer)"
         echo "• Monitor WAL size and adjust --wal-flush-interval if needed"
-        echo "• Consider --wal-max-write-buffer-size for high-throughput scenarios"
+        if [[ "$STORAGE_ENGINE" == "parquet" ]]; then
+            echo "• Consider --wal-max-buffered-writes to limit queued writes (a count, not bytes)"
+        else
+            echo "• Tune --wal-buffer-size to control the in-memory WAL flush threshold"
+        fi
         ;;
     query)
-        echo "• Increase --parquet-mem-cache-size for frequently accessed data"
+        echo "• Tune --file-cache-size for frequently accessed data and leave memory headroom"
         echo "• Use --datafusion-config for advanced query tuning"
         echo "• Monitor query latency and adjust memory pool as needed"
         ;;
     compact)
-        echo "• Adjust --compaction-multipliers for your data patterns"
-        echo "• Monitor compaction lag and add nodes if falling behind"
-        echo "• Consider --compaction-max-num-files-per-plan for large datasets"
+        if [[ "$STORAGE_ENGINE" == "parquet" ]]; then
+            echo "• Adjust --compaction-multipliers for your data patterns"
+        else
+            echo "• Tune --compactor-input-size-budget for active compaction input"
+        fi
+        if [[ "$STORAGE_ENGINE" == "parquet" ]]; then
+            echo "• Monitor compaction lag and scale the existing compactor; Parquet permits only one running compactor"
+        else
+            echo "• Monitor compaction lag and add nodes if falling behind"
+        fi
+        if [[ "$STORAGE_ENGINE" == "parquet" ]]; then
+            echo "• Tune --compaction-row-limit for rows per output file"
+        else
+            echo "• Use --compactor-file-cache-size only on dedicated PachaTree compactors"
+        fi
         ;;
     process)
         echo "• Ensure --plugin-dir contains your Python plugins"
@@ -611,12 +650,21 @@ case $MODE in
         ;;
     *)
         echo "• Monitor all workloads and consider specializing nodes if needed"
-        echo "• Enable checkpointing for faster restarts"
+        if [[ "$STORAGE_ENGINE" == "parquet" ]]; then
+            echo "• Enable checkpointing for faster restarts"
+        else
+            echo "• Tune --snapshot-size and --snapshot-duration to balance restart replay and object-store traffic"
+        fi
         echo "• Adjust thread allocation based on observed workload patterns"
+        if [[ "$MODE" == "all" ]]; then
+            echo "• Use all mode for single-node deployments; multi-node clusters need explicit combined modes"
+        fi
         ;;
 esac
 
 echo ""
+echo "• Sizing values are heuristics, not server defaults; validate thread and combined memory budgets under load"
+echo "• Memory percentages use detected cgroup/host RAM, not this form; set container limits or use absolute sizes"
 echo "• Always test configuration changes in a non-production environment"
 echo "• Monitor metrics endpoint at /metrics for performance insights"
 echo "• Use --log-filter for debugging specific components"
