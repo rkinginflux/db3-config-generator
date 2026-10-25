@@ -3,6 +3,7 @@ import {
   CANONICAL_MODES,
   CANONICAL_OBJECT_STORES,
   type CanonicalMode,
+  type StorageEngine,
   generateConfiguration
 } from './lib/config-generator';
 
@@ -22,6 +23,7 @@ function App() {
   const [mode, setMode] = useState<CanonicalMode>('all');
   const [objectStore, setObjectStore] = useState<(typeof CANONICAL_OBJECT_STORES)[number]>('file');
   const [includeEnvVars, setIncludeEnvVars] = useState(true);
+  const [storageEngine, setStorageEngine] = useState<StorageEngine>('pacha-tree');
 
   const configuration = useMemo(
     () =>
@@ -30,9 +32,10 @@ function App() {
         ramGb,
         mode,
         objectStore,
-        includeEnvVars
+        includeEnvVars,
+        storageEngine
       }),
-    [cpus, includeEnvVars, mode, objectStore, ramGb]
+    [cpus, includeEnvVars, mode, objectStore, ramGb, storageEngine]
   );
 
   return (
@@ -103,7 +106,20 @@ function App() {
                 ))}
               </select>
             </label>
+            <label className="field">
+              <span>Storage engine</span>
+              <select value={storageEngine} onChange={(event) => setStorageEngine(event.target.value as StorageEngine)}>
+                <option value="pacha-tree">PachaTree</option>
+                <option value="parquet">Legacy Parquet</option>
+              </select>
+            </label>
           </div>
+
+          <p className="compatibility-note">
+            Select the engine your cluster already uses. This does not switch or upgrade it.
+            New clusters use PachaTree; legacy settings apply only to clusters started on 3.10 or earlier that have not upgraded.
+            Sizing values are heuristics, not server defaults; validate combined memory budgets before deployment.
+          </p>
 
           <label className="toggle-row">
             <input

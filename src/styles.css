@@ -287,6 +287,7 @@ h3 {
 
 .summary-card strong {
   display: block;
+  overflow-wrap: anywhere;
   margin: 10px 0 8px;
   font-size: 1.85rem;
   font-weight: 600;
