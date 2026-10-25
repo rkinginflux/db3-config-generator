@@ -513,7 +513,7 @@ export function buildRecommendations(mode: CanonicalMode, storageEngine: Storage
     'Adjust thread allocation based on observed workload patterns'
   ];
   const specific: Record<CanonicalMode, string[]> = {
-    all: balanced,
+    all: [...balanced, 'Use all mode for single-node deployments; multi-node clusters need explicit combined modes'],
     ingest: [
       'Scale IO threads with concurrent writers (~1 thread per writer)',
       'Monitor WAL size and adjust --wal-flush-interval if needed',
@@ -530,7 +530,9 @@ export function buildRecommendations(mode: CanonicalMode, storageEngine: Storage
       storageEngine === 'parquet'
         ? 'Adjust --compaction-multipliers for your data patterns'
         : 'Tune --compactor-input-size-budget for active compaction input',
-      'Monitor compaction lag and add nodes if falling behind',
+      storageEngine === 'parquet'
+        ? 'Monitor compaction lag and scale the existing compactor; Parquet permits only one running compactor'
+        : 'Monitor compaction lag and add nodes if falling behind',
       storageEngine === 'parquet'
         ? 'Tune --compaction-row-limit for rows per output file'
         : 'Use --compactor-file-cache-size only on dedicated PachaTree compactors'

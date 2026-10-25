@@ -632,7 +632,11 @@ case $MODE in
         else
             echo "• Tune --compactor-input-size-budget for active compaction input"
         fi
-        echo "• Monitor compaction lag and add nodes if falling behind"
+        if [[ "$STORAGE_ENGINE" == "parquet" ]]; then
+            echo "• Monitor compaction lag and scale the existing compactor; Parquet permits only one running compactor"
+        else
+            echo "• Monitor compaction lag and add nodes if falling behind"
+        fi
         if [[ "$STORAGE_ENGINE" == "parquet" ]]; then
             echo "• Tune --compaction-row-limit for rows per output file"
         else
@@ -652,6 +656,9 @@ case $MODE in
             echo "• Tune --snapshot-size and --snapshot-duration to balance restart replay and object-store traffic"
         fi
         echo "• Adjust thread allocation based on observed workload patterns"
+        if [[ "$MODE" == "all" ]]; then
+            echo "• Use all mode for single-node deployments; multi-node clusters need explicit combined modes"
+        fi
         ;;
 esac
 

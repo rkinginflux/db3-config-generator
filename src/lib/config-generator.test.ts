@@ -25,6 +25,13 @@ describe('normalizeObjectStore', () => {
 });
 
 describe('generateConfiguration', () => {
+  it('explains single-node all mode and the legacy single-compactor restriction', () => {
+    expect(buildRecommendations('all').join(' ')).toContain('single-node');
+    const legacy = buildRecommendations('compact', 'parquet').join(' ');
+    expect(legacy).toContain('only one running compactor');
+    expect(legacy).not.toContain('add nodes');
+  });
+
   it('keeps upgraded-engine guidance free of legacy and removed tuning flags', () => {
     for (const mode of CANONICAL_MODES) {
       const guidance = buildRecommendations(mode).join(' ');

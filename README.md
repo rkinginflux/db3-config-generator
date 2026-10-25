@@ -44,6 +44,9 @@ PachaTree compactors default to a larger cache budget.
 
 Presets cover the existing seven workload combinations, not every server mode
 (for example, WebUI and distributed Processing Engine roles need separate setup).
+The `all` preset is for single-node deployments, not cluster-aware combined mode.
+Legacy Parquet clusters permit only one running compactor; scale that compactor
+rather than adding a second one.
 Replace all `<...>` placeholders before running generated commands or exports.
 
 ### Local development and verification
